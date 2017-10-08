@@ -1,184 +1,59 @@
-# Author: JEEWESH KUMAR JHA
-# 1. Merges the training and the test sets to create one data set.
-# 2. Extracts only the measurements on the mean and standard deviation for each measurement.
-# 3. Uses descriptive activity names to name the activities in the data set
-# 4. Appropriately labels the data set with descriptive variable names.
-#average of each variable for each activity and each subject.
-# 5. From the data set in step 4, creates a second, independent tidy data set with the average of each variable for each activity and each subject.
-# Required two library(“data.table”, “ reshap2”)
+# Author: Jeewesh Kumar Jha
+# 1.Download the dataset if it does not already exist in the working directory
+#2.Load the activity and feature info
+#3.Loads both the training and test datasets, keeping only those columns which reflect a mean or standard deviation
+#4.Loads the activity and subject data for each dataset, and merges those columns with the dataset
+#5.Merges the two datasets
+#6.Converts the activity and subject columns into factors
+#7.Creates a tidy dataset that consists of the average (mean) value of each variable for each subject and activity pair.
+#The end result is shown in the file tidy.txt.
+library(reshape2)
 
-#Preliminaries
-#Load packages.
+filename <- "getdata_dataset.zip"
 
-packages <- c("data.table", "reshape2")
-sapply(packages, require, character.only=TRUE, quietly=TRUE)
-
-#Set path.
-path <- getwd()
-
-path
-
-#Get the data
-#Download the file. Put it in the Data folder. This was already done on 2014-04-11; save time and don't evaluate again.
-
-url <- "https://d396qusza40orc.cloudfront.net/getdata%2Fprojectfiles%2FUCI%20HAR%20Dataset.zip"
-f <- "Dataset.zip"
-if (!file.exists(path)) {dir.create(path)}
-download.file(url, file.path(path, f))
-
-#Unzip the file. This was already done on 2014-04-11; save time and don't evaluate again.
-
-executable <- file.path("C:", "Program Files (x86)", "7-Zip", "7z.exe")
-parameters <- "x"
-cmd <- paste(paste0("\"", executable, "\""), parameters, paste0("\"", file.path(path, f), "\""))
-system(cmd)
-
-#The archive put the files in a folder named UCI HAR Dataset. Set this folder as the input path. List the files here.
-
-pathIn <- file.path(path, "UCI HAR Dataset")
-list.files(pathIn, recursive=TRUE)
-
-#See the README.txt file in r path for detailed information on the dataset.
-#For the purposes of this project, the files in the Inertial Signals folders are not used.
-#Read the files
-#Read the subject files.
-
-dtSubjectTrain <- fread(file.path(pathIn, "train", "subject_train.txt"))
-dtSubjectTest  <- fread(file.path(pathIn, "test" , "subject_test.txt" ))
-
-#Read the activity files. For some reason, these are called label files in the README.txt documentation.
-
-dtActivityTrain <- fread(file.path(pathIn, "train", "Y_train.txt"))
-dtActivityTest  <- fread(file.path(pathIn, "test" , "Y_test.txt" ))
-
-#Read the data files. fread seems to be giving me some trouble reading files. Using a helper function, read the file with read.table instead, then convert the 
-
-resulting data frame to a data table. Return the data table.
-
-fileToDataTable <- function (f) {
-  df <- read.table(f)
-  dt <- data.table(df)
-}
-dtTrain <- fileToDataTable(file.path(pathIn, "train", "X_train.txt"))
-dtTest  <- fileToDataTable(file.path(pathIn, "test" , "X_test.txt" ))
-
-#Merge the training and the test sets
-#Concatenate the data tables.
-
-dtSubject <- rbind(dtSubjectTrain, dtSubjectTest)
-setnames(dtSubject, "V1", "subject")
-dtActivity <- rbind(dtActivityTrain, dtActivityTest)
-setnames(dtActivity, "V1", "activityNum")
-dt <- rbind(dtTrain, dtTest)
-
-#Merge columns.
-
-dtSubject <- cbind(dtSubject, dtActivity)
-dt <- cbind(dtSubject, dt)
-
-#Set key.
-
-setkey(dt, subject, activityNum)
-
-#Extract only the mean and standard deviation
-
-#Read the features.txt file. This tells which variables in dt are measurements for the mean and standard deviation.
-
-dtFeatures <- fread(file.path(pathIn, "features.txt"))
-
-setnames(dtFeatures, names(dtFeatures), c("featureNum", "featureName"))
-#Subset only measurements for the mean and standard deviation.
-
-dtFeatures <- dtFeatures[grepl("mean\\(\\)|std\\(\\)", featureName)]
-
-#Convert the column numbers to a vector of variable names matching columns in dt.
-
-dtFeatures$featureCode <- dtFeatures[, paste0("V", featureNum)]
-head(dtFeatures)
-dtFeatures$featureCode
-
-#Subset these variables using variable names.
-
-select <- c(key(dt), dtFeatures$featureCode)
-dt <- dt[, select, with=FALSE]
-
-#Use descriptive activity nameslibrary
-#Read activity_labels.txt file. This will be used to add descriptive names to the activities.
-
-dtActivityNames <- fread(file.path(pathIn, "activity_labels.txt"))
-setnames(dtActivityNames, names(dtActivityNames), c("activityNum", "activityName"))
-
-#Label with descriptive activity names
-#Merge activity labels.
-
-dt <- merge(dt, dtActivityNames, by="activityNum", all.x=TRUE)
-
-#Add activityName as a key.
-
-setkey(dt, subject, activityNum, activityName)
-
-#Melt the data table to reshape it from a short and wide format to a tall and narrow format.
-
-dt <- data.table(melt(dt, key(dt), variable.name="featureCode"))
-
-#Merge activity name.
-
-dt <- merge(dt, dtFeatures[, list(featureNum, featureCode, featureName)], by="featureCode", all.x=TRUE)
-
-#Create a new variable, activity that is equivalent to activityName as a factor class. Create a new variable, feature that is equivalent to featureName as a factor 
-
-class.
-
-dt$activity <- factor(dt$activityName)
-dt$feature <- factor(dt$featureName)
-
-#Seperate features from featureName using the helper function grepthis.
-
-grepthis <- function (regex) {
-  grepl(regex, dt$feature)
+## Download and unzip the dataset:
+if (!file.exists(filename)){
+  fileURL <- "https://d396qusza40orc.cloudfront.net/getdata%2Fprojectfiles%2FUCI%20HAR%20Dataset.zip "
+  download.file(fileURL, filename, method="curl")
+}  
+if (!file.exists("UCI HAR Dataset")) { 
+  unzip(filename) 
 }
 
-## Features with 2 categories
+# Load activity labels + features
+activityLabels <- read.table("UCI HAR Dataset/activity_labels.txt")
+activityLabels[,2] <- as.character(activityLabels[,2])
+features <- read.table("UCI HAR Dataset/features.txt")
+features[,2] <- as.character(features[,2])
 
-n <- 2
-y <- matrix(seq(1, n), nrow=n)
-x <- matrix(c(grepthis("^t"), grepthis("^f")), ncol=nrow(y))
-dt$featDomain <- factor(x %*% y, labels=c("Time", "Freq"))
-x <- matrix(c(grepthis("Acc"), grepthis("Gyro")), ncol=nrow(y))
-dt$featInstrument <- factor(x %*% y, labels=c("Accelerometer", "Gyroscope"))
-x <- matrix(c(grepthis("BodyAcc"), grepthis("GravityAcc")), ncol=nrow(y))
-dt$featAcceleration <- factor(x %*% y, labels=c(NA, "Body", "Gravity"))
-x <- matrix(c(grepthis("mean()"), grepthis("std()")), ncol=nrow(y))
-dt$featVariable <- factor(x %*% y, labels=c("Mean", "SD"))
+# Extract only the data on mean and standard deviation
+featuresWanted <- grep(".*mean.*|.*std.*", features[,2])
+featuresWanted.names <- features[featuresWanted,2]
+featuresWanted.names = gsub('-mean', 'Mean', featuresWanted.names)
+featuresWanted.names = gsub('-std', 'Std', featuresWanted.names)
+featuresWanted.names <- gsub('[-()]', '', featuresWanted.names)
 
-## Features with 1 category
 
-dt$featJerk <- factor(grepthis("Jerk"), labels=c(NA, "Jerk"))
-dt$featMagnitude <- factor(grepthis("Mag"), labels=c(NA, "Magnitude"))
+# Load the datasets
+train <- read.table("UCI HAR Dataset/train/X_train.txt")[featuresWanted]
+trainActivities <- read.table("UCI HAR Dataset/train/Y_train.txt")
+trainSubjects <- read.table("UCI HAR Dataset/train/subject_train.txt")
+train <- cbind(trainSubjects, trainActivities, train)
 
-## Features with 3 categories
+test <- read.table("UCI HAR Dataset/test/X_test.txt")[featuresWanted]
+testActivities <- read.table("UCI HAR Dataset/test/Y_test.txt")
+testSubjects <- read.table("UCI HAR Dataset/test/subject_test.txt")
+test <- cbind(testSubjects, testActivities, test)
 
-n <- 3
-y <- matrix(seq(1, n), nrow=n)
-x <- matrix(c(grepthis("-X"), grepthis("-Y"), grepthis("-Z")), ncol=nrow(y))
-dt$featAxis <- factor(x %*% y, labels=c(NA, "X", "Y", "Z"))
+# merge datasets and add labels
+allData <- rbind(train, test)
+colnames(allData) <- c("subject", "activity", featuresWanted.names)
 
-#Check to make sure all possible combinations of feature are accounted for by all possible combinations of the factor class variables.
+# turn activities & subjects into factors
+allData$activity <- factor(allData$activity, levels = activityLabels[,1], labels = activityLabels[,2])
+allData$subject <- as.factor(allData$subject)
 
-r1 <- nrow(dt[, .N, by=c("feature")])
-r2 <- nrow(dt[, .N, by=c("featDomain", "featAcceleration", "featInstrument", "featJerk", "featMagnitude", "featVariable", "featAxis")])
-r1 == r2
+allData.melted <- melt(allData, id = c("subject", "activity"))
+allData.mean <- dcast(allData.melted, subject + activity ~ variable, mean)
 
-#Yes, I accounted for all possible combinations. feature is now redundant.
-
-#Create a tidy data set
-
-#Create a data set with the average of each variable for each activity and each subject.
-
-setkey(dt, subject, activity, featDomain, featAcceleration, featInstrument, featJerk, featMagnitude, featVariable, featAxis)
-dtTidy <- dt[, list(count = .N, average = mean(value)), by=key(dt)]
-
-#Make codebook.
-
-knitr("makeCodebook.Rmd", output="codebook.md", encoding="ISO8859-1", quiet=TRUE)
-markdownToHTML("codebook.md", "codebook.html")
+write.table(allData.mean, "tidy.txt", row.names = FALSE, quote = FALSE)
